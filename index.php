@@ -1,92 +1,84 @@
 <?php
 session_start();
-include 'config/db.php';
-
-// nếu chưa đăng nhập -> chuyển về login
-if (!isset($_SESSION['user_id'])) {
+if (!isset($_SESSION['username'])) {
     header("Location: login.php");
-    exit();
+    exit;
 }
-
-$user_id = $_SESSION['user_id'];
-// lấy tên user
-$user = $conn->query("SELECT username FROM users WHERE id = $user_id")->fetch_assoc();
-$username = $user ? htmlspecialchars($user['username']) : 'Người dùng';
-
-// lấy danh sách giao dịch
-$transactions = $conn->query("SELECT * FROM transactions WHERE user_id = $user_id ORDER BY created_at DESC");
 ?>
 <!DOCTYPE html>
-<html lang="vi">
+<html>
 <head>
     <meta charset="UTF-8">
     <title>Trang chủ - Quản lý Thu/Chi</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
-<nav class="bg-white shadow">
-    <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
-        <div class="text-lg font-bold text-blue-600">Quản lý Thu/Chi</div>
-        <div class="space-x-4">
-            <span class="text-sm">Xin chào, <strong><?= $username ?></strong></span>
-            <a href="logout.php" class="text-sm text-red-600 hover:underline">Đăng xuất</a>
+<body>
+    <h2>Quản lý Thu/Chi</h2>
+    <p>Xin chào, <?php echo $_SESSION['username']; ?> | <a href="logout.php">Đăng xuất</a></p>
+
+    <div class="container">
+        <!-- Ô 1: Nội dung chính -->
+        <div class="main-content">
+            <?php include 'add.php'; ?>
+            <hr>
+            <?php if (file_exists('list.php')) include 'list.php'; ?>
+        </div>
+
+        <!-- Ô 2: Biểu đồ -->
+        <div class="chart">
+            <h3>Biểu đồ thống kê</h3>
+            <canvas id="myChart"></canvas>
+        </div>
+
+        <!-- Ô 3: Lịch -->
+        <div class="calendar">
+            <h3>Lịch thống kê</h3>
+            <table class="calendar-table">
+                <tr>
+                    <th>CN</th><th>T2</th><th>T3</th><th>T4</th><th>T5</th><th>T6</th><th>T7</th>
+                </tr>
+                <tr>
+                    <td></td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td>
+                </tr>
+                <tr>
+                    <td>7</td><td>8</td><td>9</td><td>10</td><td>11</td><td>12</td><td>13</td>
+                </tr>
+                <tr>
+                    <td>14</td><td>15</td><td>16</td><td>17</td><td>18</td><td>19</td><td>20</td>
+                </tr>
+                <tr>
+                    <td>21</td><td>22</td><td>23</td><td>24</td><td>25</td><td>26</td><td>27</td>
+                </tr>
+                <tr>
+                    <td>28</td><td>29</td><td>30</td><td>31</td><td></td><td></td><td></td>
+                </tr>
+            </table>
         </div>
     </div>
-</nav>
 
-<div class="max-w-4xl mx-auto p-6">
-    <div class="bg-white rounded shadow p-4 mb-6">
-        <h2 class="text-xl font-semibold mb-2">Thêm giao dịch mới</h2>
-        <form action="add.php" method="POST" class="grid grid-cols-1 gap-2 md:grid-cols-4">
-            <input name="amount" type="number" step="0.01" required placeholder="Số tiền"
-                   class="p-2 border rounded md:col-span-1">
-            <select name="type" required class="p-2 border rounded md:col-span-1">
-                <option value="income">Thu</option>
-                <option value="expense">Chi</option>
-            </select>
-            <input name="category" placeholder="Danh mục" class="p-2 border rounded md:col-span-1">
-            <input name="created_at" type="date" required class="p-2 border rounded md:col-span-1">
-            <input name="note" placeholder="Ghi chú" class="p-2 border rounded md:col-span-4">
-            <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded md:col-span-4">Lưu</button>
-        </form>
-    </div>
-
-    <div class="bg-white rounded shadow p-4">
-        <h2 class="text-xl font-semibold mb-2">Danh sách giao dịch</h2>
-        <?php if ($transactions && $transactions->num_rows > 0): ?>
-            <div class="overflow-x-auto">
-            <table class="min-w-full">
-                <thead>
-                    <tr class="text-left">
-                        <th class="px-3 py-2">Ngày</th>
-                        <th class="px-3 py-2">Số tiền</th>
-                        <th class="px-3 py-2">Loại</th>
-                        <th class="px-3 py-2">Danh mục</th>
-                        <th class="px-3 py-2">Ghi chú</th>
-                        <th class="px-3 py-2">Hành động</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php while($row = $transactions->fetch_assoc()): ?>
-                    <tr class="border-t">
-                        <td class="px-3 py-2"><?= htmlspecialchars($row['created_at']) ?></td>
-                        <td class="px-3 py-2"><?= htmlspecialchars($row['amount']) ?></td>
-                        <td class="px-3 py-2"><?= htmlspecialchars($row['type']) ?></td>
-                        <td class="px-3 py-2"><?= htmlspecialchars($row['category']) ?></td>
-                        <td class="px-3 py-2"><?= htmlspecialchars($row['note']) ?></td>
-                        <td class="px-3 py-2">
-                            <a href="delete.php?id=<?= $row['id'] ?>" class="text-red-600 hover:underline"
-                               onclick="return confirm('Xác nhận xóa?')">Xóa</a>
-                        </td>
-                    </tr>
-                <?php endwhile; ?>
-                </tbody>
-            </table>
-            </div>
-        <?php else: ?>
-            <p>Chưa có giao dịch nào.</p>
-        <?php endif; ?>
-    </div>
-</div>
+    <script>
+    // Ví dụ dữ liệu biểu đồ
+    const ctx = document.getElementById('myChart');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Tháng 1', 'Tháng 2', 'Tháng 3'],
+            datasets: [{
+                label: 'Số tiền',
+                data: [500000, 700000, 300000],
+                borderWidth: 1,
+                backgroundColor: 'rgba(54, 162, 235, 0.5)'
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    </script>
 </body>
 </html>
