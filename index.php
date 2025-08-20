@@ -4,13 +4,14 @@ if (!isset($_SESSION['username'])) {
     header("Location: login.php");
     exit;
 }
+include 'config/db.php';
 ?>
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Trang chủ - Quản lý Thu/Chi</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="<?php echo dirname($_SERVER['PHP_SELF']) === '/' ? 'style.css' : './style.css'; ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -20,18 +21,55 @@ if (!isset($_SESSION['username'])) {
     <div class="container">
         <!-- Ô 1: Nội dung chính -->
         <div class="main-content">
-            <?php include 'add.php'; ?>
+            <!-- Form thêm giao dịch -->
+            <h3>Thêm giao dịch mới</h3>
+            <form method="POST" action="add.php" class="transaction-form">
+                <input type="number" name="amount" placeholder="Số tiền" required step="0.01" class="form-input">
+                <select name="type" required class="form-select">
+                    <option value="Thu">Thu</option>
+                    <option value="Chi">Chi</option>
+                </select>
+                <input type="text" name="category" placeholder="Danh mục" required class="form-input">
+                <input type="text" name="note" placeholder="Ghi chú" class="form-input">
+                <input type="date" name="created_at" value="<?php echo date('Y-m-d'); ?>" required class="form-input">
+                <button type="submit" class="submit-btn">Thêm giao dịch</button>
+            </form>
+            
             <hr>
-            <?php if (file_exists('list.php')) include 'list.php'; ?>
+            
+            <!-- Danh sách giao dịch -->
+            <h3>Danh sách giao dịch</h3>
+            <?php
+            $user_id = $_SESSION['user_id'];
+            $result = $conn->query("SELECT * FROM transactions WHERE user_id = $user_id ORDER BY created_at DESC");
+            
+            if ($result->num_rows > 0) {
+                echo "<table border='1' class='transactions-table'>";
+                echo "<tr><th>Số tiền</th><th>Loại</th><th>Danh mục</th><th>Ghi chú</th><th>Ngày</th><th>Thao tác</th></tr>";
+                
+                while ($row = $result->fetch_assoc()) {
+                    echo "<tr>";
+                    echo "<td>" . number_format($row['amount']) . " VNĐ</td>";
+                    echo "<td>" . $row['type'] . "</td>";
+                    echo "<td>" . $row['category'] . "</td>";
+                    echo "<td>" . $row['note'] . "</td>";
+                    echo "<td>" . $row['created_at'] . "</td>";
+                    echo "<td><a href='delete.php?id=" . $row['id'] . "' onclick='return confirm(\"Bạn có chắc chắn muốn xóa?\")' class='delete-link'>Xóa</a></td>";
+                    echo "</tr>";
+                }
+                echo "</table>";
+            } else {
+                echo "<p class='no-data'>Chưa có giao dịch nào.</p>";
+            }
+            ?>
         </div>
 
-        <!-- Ô 2: Biểu đồ -->
+        <!-- Các phần biểu đồ và lịch giữ nguyên -->
         <div class="chart">
             <h3>Biểu đồ thống kê</h3>
             <canvas id="myChart"></canvas>
         </div>
 
-        <!-- Ô 3: Lịch -->
         <div class="calendar">
             <h3>Lịch thống kê</h3>
             <table class="calendar-table">
@@ -58,7 +96,7 @@ if (!isset($_SESSION['username'])) {
     </div>
 
     <script>
-    // Ví dụ dữ liệu biểu đồ
+    // Script biểu đồ
     const ctx = document.getElementById('myChart');
     new Chart(ctx, {
         type: 'bar',
@@ -68,13 +106,38 @@ if (!isset($_SESSION['username'])) {
                 label: 'Số tiền',
                 data: [500000, 700000, 300000],
                 borderWidth: 1,
-                backgroundColor: 'rgba(54, 162, 235, 0.5)'
+                backgroundColor: [
+                    'rgba(102, 126, 234, 0.8)',
+                    'rgba(118, 75, 162, 0.8)',
+                    'rgba(79, 70, 229, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(102, 126, 234, 1)',
+                    'rgba(118, 75, 162, 1)',
+                    'rgba(79, 70, 229, 1)'
+                ],
+                borderWidth: 2
             }]
         },
         options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Thống kê thu chi theo tháng'
+                }
+            },
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('vi-VN') + ' VNĐ';
+                        }
+                    }
                 }
             }
         }
