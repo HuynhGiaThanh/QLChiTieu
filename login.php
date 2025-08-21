@@ -42,20 +42,31 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <title>Đăng nhập</title>
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <h2>Đăng nhập</h2>
-    <?php if (!empty($error)) { ?>
-        <p style="color:red;"><?php echo $error; ?></p>
-    <?php } ?>
-    <form method="POST" action="">
-        <label>Tên đăng nhập:</label><br>
-        <input type="text" name="username" required><br>
+<body class="auth-body">
+    <div class="auth-container">
+        <h2>Đăng nhập</h2>
         
-        <label>Mật khẩu:</label><br>
-        <input type="password" name="password" required><br>
+        <?php if (!empty($error)): ?>
+            <div class="error-message"><?php echo $error; ?></div>
+        <?php endif; ?>
         
-        <input type="submit" value="Đăng nhập">
-    </form>
-    <p>Chưa có tài khoản? <a href="register.php">Đăng ký ngay</a></p>
+        <form method="POST" action="" class="auth-form">
+            <div class="form-group">
+                <label>Tên đăng nhập:</label>
+                <input type="text" name="username" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Mật khẩu:</label>
+                <input type="password" name="password" required>
+            </div>
+            
+            <button type="submit" class="auth-btn">Đăng nhập</button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>Chưa có tài khoản? <a href="register.php">Đăng ký ngay</a></p>
+        </div>
+    </div>
 </body>
 </html>
