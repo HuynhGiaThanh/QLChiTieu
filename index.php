@@ -9,14 +9,28 @@ include 'config/db.php';
 
 $user_id = $_SESSION['user_id'];
 
+// Xử lý xoá giao dịch nếu có yêu cầu
+if (isset($_GET['delete_id'])) {
+    $delete_id = intval($_GET['delete_id']);
+    $stmt = $conn->prepare("DELETE FROM transactions WHERE id = ? AND user_id = ?");
+    $stmt->bind_param("ii", $delete_id, $user_id);
+    if ($stmt->execute()) {
+        header("Location: index.php?success=deleted");
+        exit;
+    } else {
+        header("Location: index.php?error=delete_failed");
+        exit;
+    }
+}
+
 // Lấy dữ liệu thống kê
 try {
-    // Tổng quan các ví
+    // Tổng quan các ví - CẬP NHẬT: xoá Love, thêm Ăn uống
     $wallet_stats = $conn->query("SELECT 
         SUM(CASE WHEN category = 'Sống' THEN amount ELSE 0 END) as total_song,
         SUM(CASE WHEN category = 'Tiết kiệm' THEN amount ELSE 0 END) as total_tietkiem,
         SUM(CASE WHEN category = 'Chơi' THEN amount ELSE 0 END) as total_choi,
-        SUM(CASE WHEN category = 'Love' THEN amount ELSE 0 END) as total_love,
+        SUM(CASE WHEN category = 'Ăn uống' THEN amount ELSE 0 END) as total_anuong,
         SUM(CASE WHEN category = 'Đầu tư' THEN amount ELSE 0 END) as total_dautu,
         SUM(CASE WHEN type = 'Thu' THEN amount ELSE 0 END) as total_thu,
         SUM(CASE WHEN type = 'Chi' THEN amount ELSE 0 END) as total_chi,
@@ -39,6 +53,49 @@ try {
     $recent_transactions = $conn->query("SELECT * FROM transactions 
         WHERE user_id = $user_id 
         ORDER BY created_at DESC LIMIT 5");
+    
+    // DỮ LIỆU CHO BIỂU ĐỒ MỚI
+    // Tổng thu
+    $total_income = $conn->query("SELECT SUM(amount) as total FROM transactions 
+        WHERE user_id = $user_id AND type = 'Thu'")->fetch_assoc()['total'] ?? 0;
+    
+    // Tổng chi theo danh mục
+    $expense_by_category = $conn->query("SELECT 
+        category,
+        SUM(amount) as total_amount
+        FROM transactions 
+        WHERE user_id = $user_id AND type = 'Chi'
+        GROUP BY category 
+        ORDER BY total_amount DESC");
+    
+    // Tạo mảng dữ liệu cho biểu đồ
+    $chart_labels = [];
+    $chart_data = [];
+    $chart_colors = [];
+    $chart_categories = [];
+    
+    // Thêm các danh mục chi tiêu
+    $color_palette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF'];
+    $color_index = 0;
+    
+    $total_expense = 0;
+    while ($row = $expense_by_category->fetch_assoc()) {
+        $chart_labels[] = $row['category'];
+        $chart_data[] = $row['total_amount'];
+        $chart_colors[] = $color_palette[$color_index % count($color_palette)];
+        $chart_categories[] = $row['category'];
+        $total_expense += $row['total_amount'];
+        $color_index++;
+    }
+    
+    // Thêm phần dư (nếu có)
+    $balance = $total_income - $total_expense;
+    if ($balance > 0) {
+        $chart_labels[] = 'Dư';
+        $chart_data[] = $balance;
+        $chart_colors[] = '#90EE90';
+        $chart_categories[] = 'Dư';
+    }
         
 } catch (Exception $e) {
     die("Lỗi truy vấn dữ liệu: " . $e->getMessage());
@@ -113,11 +170,11 @@ try {
 
             <div class="wallet-card">
                 <div class="wallet-icon">
-                    <i class="fas fa-heart"></i>
+                    <i class="fas fa-utensils"></i>
                 </div>
                 <div class="wallet-info">
-                    <h3><?php echo number_format($stats['total_love'] ?? 0); ?> VND</h3>
-                    <p>Tổng tiền ví Love</p>
+                    <h3><?php echo number_format($stats['total_anuong'] ?? 0); ?> VND</h3>
+                    <p>Tổng tiền ví Ăn uống</p>
                 </div>
             </div>
 
@@ -139,7 +196,7 @@ try {
                 <div class="account-section">
                     <div class="section-header">
                         <h3><i class="fas fa-credit-card"></i> Tài khoản - Ví</h3>
-                        <a href="#" class="view-all">Xem thống kê →</a>
+                        <!-- ĐÃ XOÁ NÚT "Xem thống kê" -->
                     </div>
                     <div class="account-summary">
                         <div class="summary-item">
@@ -157,35 +214,33 @@ try {
                     </div>
                 </div>
 
-                <!-- Control Panel -->
-                <div class="control-section">
+                <!-- Thêm phần thống kê nhanh thay cho bảng điều khiển -->
+                <div class="account-section">
                     <div class="section-header">
-                        <h3><i class="fas fa-sliders-h"></i> Bảng điều khiển</h3>
+                        <h3><i class="fas fa-chart-bar"></i> Thống kê nhanh</h3>
                     </div>
-                    <div class="control-panel">
-                        <div class="control-item">
-                            <label>Năm:</label>
-                            <select>
-                                <option value="2024">2024</option>
-                                <option value="2023">2023</option>
-                                <option value="2022" selected>2022</option>
-                            </select>
+                    <div class="account-summary">
+                        <div class="summary-item">
+                            <span class="label">Số giao dịch:</span>
+                            <span class="value"><?php echo $recent_transactions->num_rows; ?></span>
                         </div>
-                        <div class="control-item">
-                            <label>Tháng:</label>
-                            <select>
-                                <option value="10" selected>10</option>
-                                <?php for ($i = 1; $i <= 12; $i++): ?>
-                                    <option value="<?php echo $i; ?>"><?php echo $i; ?></option>
-                                <?php endfor; ?>
-                            </select>
-                        </div>
-                        <div class="control-item">
-                            <label>Ví:</label>
-                            <select>
-                                <option value="11" selected>11 - Ví chính</option>
-                                <option value="12">12 - Ví phụ</option>
-                            </select>
+                        <div class="summary-item">
+                            <span class="label">Danh mục chi nhiều nhất:</span>
+                            <span class="value">
+                                <?php 
+                                $max_expense = 0;
+                                $max_category = 'Chưa có';
+                                // Reset con trỏ để lặp lại
+                                $expense_by_category->data_seek(0);
+                                while ($row = $expense_by_category->fetch_assoc()) {
+                                    if ($row['total_amount'] > $max_expense) {
+                                        $max_expense = $row['total_amount'];
+                                        $max_category = $row['category'];
+                                    }
+                                }
+                                echo $max_category . ' (' . number_format($max_expense) . ' VND)';
+                                ?>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -195,30 +250,15 @@ try {
             <div class="right-column">
                 <div class="chart-section">
                     <div class="section-header">
-                        <h3><i class="fas fa-chart-pie"></i> Biểu đồ chi tiêu theo danh mục</h3>
+                        <h3><i class="fas fa-chart-pie"></i> Biểu đồ thu chi tổng quan</h3>
                     </div>
                     <div class="chart-container">
                         <canvas id="categoryChart"></canvas>
                     </div>
                     <div class="chart-summary">
-                        <p><strong>Tổng số tiền:</strong> <?php echo number_format($stats['total_chi'] ?? 0); ?> VND</p>
-                        <div class="chart-legend">
-                            <div class="legend-item">
-                                <span class="color-dot" style="background: #FF6384;"></span>
-                                <span>Ăn uống: 700,000</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="color-dot" style="background: #36A2EB;"></span>
-                                <span>Mua sắm: 550,000</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="color-dot" style="background: #FFCE56;"></span>
-                                <span>Giải trí: 225,000</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="color-dot" style="background: #4BC0C0;"></span>
-                                <span>Y tế: 45,000</span>
-                            </div>
+                        <p><strong>Tổng thu:</strong> <?php echo number_format($total_income); ?> VND</p>
+                        <div class="chart-legend" id="chartLegend">
+                            <!-- Nội dung động sẽ được thêm bằng JavaScript -->
                         </div>
                     </div>
                 </div>
@@ -232,7 +272,10 @@ try {
             </div>
             <div class="transactions-list">
                 <?php if ($recent_transactions->num_rows > 0): ?>
-                    <?php while ($row = $recent_transactions->fetch_assoc()): ?>
+                    <?php 
+                    // Reset con trỏ kết quả để lặp lại
+                    $recent_transactions->data_seek(0);
+                    while ($row = $recent_transactions->fetch_assoc()): ?>
                         <?php
                         $amount_class = $row['type'] == 'Thu' ? 'income' : 'expense';
                         $icon = $row['type'] == 'Thu' ? 'fa-arrow-down' : 'fa-arrow-up';
@@ -250,6 +293,11 @@ try {
                             <div class="transaction-amount <?php echo $amount_class; ?>">
                                 <?php echo $amount_sign . number_format($row['amount']); ?> VND
                             </div>
+                            <div class="transaction-actions">
+                                <button class="delete-btn" onclick="confirmDelete(<?php echo $row['id']; ?>)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         </div>
                     <?php endwhile; ?>
                 <?php else: ?>
@@ -261,10 +309,7 @@ try {
             </div>
         </div>
 
-        <!-- Footer -->
-        <footer class="finance-footer">
-            <p>Copyright 2024 © by TÀI CHÍNH CÁ NHÂN. All rights reserved.</p>
-        </footer>
+        
     </div>
 
     <!-- Add Transaction Modal -->
@@ -287,7 +332,7 @@ try {
                         <option value="Sống">Sống</option>
                         <option value="Tiết kiệm">Tiết kiệm</option>
                         <option value="Chơi">Chơi</option>
-                        <option value="Love">Love</option>
+                        <option value="Ăn uống">Ăn uống</option> <!-- ĐÃ THAY THẾ LOVE BẰNG ĂN UỐNG -->
                         <option value="Đầu tư">Đầu tư</option>
                         <option value="Lương">Lương</option>
                         <option value="Thưởng">Thưởng</option>
@@ -319,14 +364,14 @@ try {
     // Category Chart
     const categoryCtx = document.getElementById('categoryChart').getContext('2d');
     
+    // Sử dụng dữ liệu từ PHP
     const categoryData = {
-        labels: ['Ăn uống', 'Mua sắm', 'Giải trí', 'Y tế', 'Giáo dục', 'Khác'],
+        labels: <?php echo json_encode($chart_labels); ?>,
         datasets: [{
-            data: [700000, 550000, 225000, 45000, 900000, 370000],
-            backgroundColor: [
-                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
-            ],
-            borderWidth: 2
+            data: <?php echo json_encode($chart_data); ?>,
+            backgroundColor: <?php echo json_encode($chart_colors); ?>,
+            borderWidth: 2,
+            hoverOffset: 15
         }]
     };
 
@@ -338,11 +383,48 @@ try {
             plugins: {
                 legend: {
                     display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = <?php echo $total_income; ?>;
+                            const percentage = Math.round((value / total) * 100);
+                            return `${label}: ${value.toLocaleString()} VND (${percentage}%)`;
+                        }
+                    }
                 }
             },
             cutout: '60%'
         }
     });
+
+    // Tạo phần chú thích động
+    const legendContainer = document.getElementById('chartLegend');
+    legendContainer.innerHTML = ''; // Xóa nội dung cũ
+
+    <?php 
+    $chart_data_js = json_encode($chart_data);
+    $chart_categories_js = json_encode($chart_categories);
+    $chart_colors_js = json_encode($chart_colors);
+    ?>
+    
+    const chartData = <?php echo $chart_data_js; ?>;
+    const chartCategories = <?php echo $chart_categories_js; ?>;
+    const chartColors = <?php echo $chart_colors_js; ?>;
+    
+    for (let i = 0; i < chartCategories.length; i++) {
+        if (chartData[i] > 0) {
+            const legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            legendItem.innerHTML = `
+                <span class="color-dot" style="background: ${chartColors[i]}"></span>
+                <span>${chartCategories[i]}: ${chartData[i].toLocaleString()} VND</span>
+            `;
+            legendContainer.appendChild(legendItem);
+        }
+    }
 
     // Modal functions
     function showAddForm(type) {
@@ -376,6 +458,13 @@ try {
             closeModal();
         }
     });
+
+    // Xác nhận xoá giao dịch
+    function confirmDelete(transactionId) {
+        if (confirm('Bạn có chắc chắn muốn xoá giao dịch này?')) {
+            window.location.href = 'index.php?delete_id=' + transactionId;
+        }
+    }
     </script>
 </body>
 </html>
