@@ -650,7 +650,8 @@
 .transactions-list::-webkit-scrollbar-thumb:hover {
     background: #5a67d8;
 }
-/* ===== SPENDING LIMITS STYLES ===== */
+
+/* ===== GIỚI HẠN CHI TIÊU ===== */
 .limits-section {
     background: white;
     padding: 25px;
@@ -664,6 +665,8 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e2e8f0;
 }
 
 .limits-header h3 {
@@ -822,27 +825,59 @@
     background: linear-gradient(135deg, #F44336 0%, #da190b 100%);
 }
 
-/* Alert notification */
+.no-limits {
+    text-align: center;
+    padding: 40px;
+    color: #a0aec0;
+}
+
+.no-limits i {
+    font-size: 48px;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.no-limits p {
+    margin: 0;
+    font-size: 16px;
+}
+
+/* CẢNH BÁO */
+.alerts-container {
+    margin-bottom: 20px;
+}
+
 .alert-notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
     background: white;
     padding: 15px 20px;
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-    border-left: 4px solid #e53e3e;
     display: flex;
     align-items: center;
     gap: 12px;
-    z-index: 1001;
+    margin-bottom: 10px;
     animation: slideInRight 0.3s ease;
-    max-width: 400px;
+}
+
+.alert-notification.warning {
+    border-left: 4px solid #FFCE56;
+}
+
+.alert-notification.danger {
+    border-left: 4px solid #F44336;
 }
 
 .alert-notification .alert-icon {
     font-size: 20px;
     flex-shrink: 0;
+}
+
+.alert-notification.warning .alert-icon {
+    color: #FFCE56;
+}
+
+.alert-notification.danger .alert-icon {
+    color: #F44336;
 }
 
 .alert-notification .alert-content {
@@ -886,28 +921,6 @@
     }
 }
 
-/* Responsive design for limits */
-@media (max-width: 768px) {
-    .limit-item {
-        flex-direction: column;
-        gap: 15px;
-        text-align: center;
-    }
-    
-    .limit-details {
-        justify-content: center;
-    }
-    
-    .limit-actions {
-        justify-content: center;
-    }
-    
-    .alert-notification {
-        left: 20px;
-        right: 20px;
-        max-width: none;
-    }
-}
 /* ===== TRANSACTION ACTIONS ===== */
 .transaction-actions {
     margin-left: 15px;
@@ -932,23 +945,6 @@
     transform: scale(1.1);
 }
 
-/* ===== RESPONSIVE DESIGN ===== */
-@media (max-width: 768px) {
-    .transaction-item {
-        flex-direction: column;
-        text-align: center;
-        gap: 10px;
-    }
-    
-    .transaction-actions {
-        margin-left: 0;
-        margin-top: 10px;
-    }
-    
-    .transaction-amount {
-        margin: 10px 0;
-    }
-}
 /* ===== AUTH PAGES STYLES ===== */
 .auth-body {
     margin: 0;
@@ -1060,6 +1056,43 @@
 }
 
 /* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+    .limit-item {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .limit-details {
+        justify-content: center;
+    }
+    
+    .limit-actions {
+        justify-content: center;
+    }
+    
+    .alert-notification {
+        flex-direction: column;
+        text-align: center;
+        gap: 8px;
+    }
+    
+    .transaction-item {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    .transaction-actions {
+        margin-left: 0;
+        margin-top: 10px;
+    }
+    
+    .transaction-amount {
+        margin: 10px 0;
+    }
+}
+
 @media (max-width: 480px) {
     .auth-container {
         padding: 30px 20px;

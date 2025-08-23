@@ -23,6 +23,84 @@ if (isset($_GET['delete_id'])) {
     }
 }
 
+// LẤY DỮ LIỆU GIỚI HẠN CHI TIÊU - THÊM XỬ LÝ LỖI
+$limits = [];
+$alerts = [];
+$limits_result = false;
+
+try {
+    // Kiểm tra xem bảng spending_limits có tồn tại không
+    $table_check = $conn->query("SHOW TABLES LIKE 'spending_limits'");
+    if ($table_check->num_rows > 0) {
+        $limits_result = $conn->query("SELECT * FROM spending_limits WHERE user_id = $user_id");
+        if ($limits_result) {
+            while ($limit = $limits_result->fetch_assoc()) {
+                $limits[$limit['category']] = $limit;
+            }
+        }
+    }
+} catch (Exception $e) {
+    // Ghi log lỗi nhưng không hiển thị cho người dùng
+    error_log("Lỗi khi truy vấn spending_limits: " . $e->getMessage());
+}
+
+// TÍNH TOÁN CHI TIÊU THEO DANH MỤC TRONG KỲ
+$current_date = date('Y-m-d');
+$period_conditions = [
+    'daily' => "created_at = '$current_date'",
+    'weekly' => "YEARWEEK(created_at, 1) = YEARWEEK('$current_date', 1)",
+    'monthly' => "YEAR(created_at) = YEAR('$current_date') AND MONTH(created_at) = MONTH('$current_date')"
+];
+
+$category_spending = [];
+$expense_categories = $conn->query("SELECT category, SUM(amount) as spent 
+                                   FROM transactions 
+                                   WHERE user_id = $user_id AND type = 'Chi' 
+                                   GROUP BY category");
+
+while ($row = $expense_categories->fetch_assoc()) {
+    $category_spending[$row['category']] = $row['spent'];
+}
+
+// KIỂM TRA GIỚI HẠN VÀ TẠO CẢNH BÁO (chỉ nếu có dữ liệu giới hạn)
+if (!empty($limits)) {
+    foreach ($limits as $limit) {
+        $category = $limit['category'];
+        $limit_amount = $limit['amount'];
+        $period = $limit['period'];
+        $spent = $category_spending[$category] ?? 0;
+        
+        // Tính chi tiêu theo kỳ
+        $period_condition = $period_conditions[$period];
+        $period_spent_result = $conn->query("SELECT SUM(amount) as period_spent 
+                                            FROM transactions 
+                                            WHERE user_id = $user_id 
+                                            AND type = 'Chi' 
+                                            AND category = '$category'
+                                            AND $period_condition");
+        
+        if ($period_spent_result) {
+            $period_spent = $period_spent_result->fetch_assoc()['period_spent'] ?? 0;
+            
+            if ($period_spent > 0) {
+                $percentage = ($period_spent / $limit_amount) * 100;
+                
+                if ($percentage >= 100) {
+                    $alerts[] = [
+                        'type' => 'danger',
+                        'message' => "Bạn đã vượt quá giới hạn chi tiêu cho $category ($period). Đã chi: " . number_format($period_spent) . " VND / Giới hạn: " . number_format($limit_amount) . " VND"
+                    ];
+                } elseif ($percentage >= 80) {
+                    $alerts[] = [
+                        'type' => 'warning',
+                        'message' => "Bạn sắp đạt giới hạn chi tiêu cho $category ($period). Đã chi: " . number_format($period_spent) . " VND / Giới hạn: " . number_format($limit_amount) . " VND (" . round($percentage) . "%)"
+                    ];
+                }
+            }
+        }
+    }
+}
+
 // Lấy dữ liệu thống kê
 try {
     // Tổng quan các ví - CẬP NHẬT: xoá Love, thêm Ăn uống
@@ -124,6 +202,26 @@ try {
             </div>
         </header>
 
+        <!-- HIỂN THỊ CẢNH BÁO GIỚI HẠN CHI TIÊU -->
+        <?php if (!empty($alerts)): ?>
+        <div class="alerts-container">
+            <?php foreach ($alerts as $alert): ?>
+            <div class="alert-notification <?php echo $alert['type']; ?>">
+                <div class="alert-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="alert-content">
+                    <div class="alert-title">Cảnh báo chi tiêu</div>
+                    <div class="alert-message"><?php echo $alert['message']; ?></div>
+                </div>
+                <button class="alert-close" onclick="this.parentElement.style.display='none'">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
         <!-- Quick Actions -->
         <div class="quick-actions">
             <button class="action-btn income-btn" onclick="showAddForm('Thu')">
@@ -134,6 +232,77 @@ try {
                 <i class="fas fa-minus-circle"></i>
                 <span>Thêm khoản chi</span>
             </button>
+        </div>
+
+        <!-- PHẦN GIỚI HẠN CHI TIÊU -->
+        <div class="limits-section">
+            <div class="limits-header">
+                <h3><i class="fas fa-chart-line"></i> Giới hạn chi tiêu</h3>
+                <button class="add-limit-btn" onclick="showLimitModal()">
+                    <i class="fas fa-plus"></i> Thêm giới hạn
+                </button>
+            </div>
+            
+            <div class="limits-list">
+                <?php 
+                if ($limits_result && $limits_result->num_rows > 0): 
+                    $limits_result->data_seek(0); // Reset con trỏ
+                    while ($limit = $limits_result->fetch_assoc()): 
+                        $category = $limit['category'];
+                        $limit_amount = $limit['amount'];
+                        $period = $limit['period'];
+                        
+                        // Tính chi tiêu theo kỳ
+                        $period_condition = $period_conditions[$period];
+                        $period_spent_result = $conn->query("SELECT SUM(amount) as period_spent 
+                                                            FROM transactions 
+                                                            WHERE user_id = $user_id 
+                                                            AND type = 'Chi' 
+                                                            AND category = '$category'
+                                                            AND $period_condition");
+                        
+                        $period_spent = $period_spent_result->fetch_assoc()['period_spent'] ?? 0;
+                        $percentage = $limit_amount > 0 ? min(100, ($period_spent / $limit_amount) * 100) : 0;
+                        
+                        $progress_class = '';
+                        if ($percentage >= 100) {
+                            $progress_class = 'danger';
+                        } elseif ($percentage >= 80) {
+                            $progress_class = 'warning';
+                        }
+                ?>
+                <div class="limit-item <?php echo $percentage >= 100 ? 'limit-warning' : ''; ?>">
+                    <div class="limit-info">
+                        <div class="limit-category"><?php echo $category; ?></div>
+                        <div class="limit-details">
+                            <span class="limit-amount"><?php echo number_format($period_spent); ?> / <?php echo number_format($limit_amount); ?> VND</span>
+                            <span class="limit-period"><?php 
+                                echo $period == 'daily' ? 'Hàng ngày' : 
+                                     ($period == 'weekly' ? 'Hàng tuần' : 'Hàng tháng');
+                            ?></span>
+                            <span class="limit-percentage">(<?php echo round($percentage); ?>%)</span>
+                        </div>
+                        <div class="limit-progress">
+                            <div class="limit-progress-bar <?php echo $progress_class; ?>" style="width: <?php echo $percentage; ?>%"></div>
+                        </div>
+                    </div>
+                    <div class="limit-actions">
+                        <button class="edit-limit-btn" onclick="editLimit(<?php echo $limit['id']; ?>, '<?php echo $category; ?>', <?php echo $limit_amount; ?>, '<?php echo $period; ?>')">
+                            <i class="fas fa-edit"></i> Sửa
+                        </button>
+                        <button class="delete-limit-btn" onclick="deleteLimit(<?php echo $limit['id']; ?>)">
+                            <i class="fas fa-trash"></i> Xóa
+                        </button>
+                    </div>
+                </div>
+                <?php endwhile; ?>
+                <?php else: ?>
+                <div class="no-limits">
+                    <i class="fas fa-chart-pie"></i>
+                    <p>Chưa có giới hạn chi tiêu nào được thiết lập</p>
+                </div>
+                <?php endif; ?>
+            </div>
         </div>
 
         <!-- Wallet Summary Grid -->
@@ -360,6 +529,50 @@ try {
         </div>
     </div>
 
+    <!-- MODAL THÊM/ SỬA GIỚI HẠN CHI TIÊU -->
+    <div id="limitModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeLimitModal()">&times;</span>
+            <h3 id="limitModalTitle"><i class="fas fa-chart-line"></i> Thêm giới hạn chi tiêu</h3>
+            <form method="POST" action="add_limit.php" class="modal-form">
+                <input type="hidden" id="limitId" name="id" value="">
+                
+                <div class="form-group">
+                    <label for="limitCategory"><i class="fas fa-tag"></i> Danh mục</label>
+                    <select id="limitCategory" name="category" required>
+                        <option value="">Chọn danh mục</option>
+                        <option value="Sống">Sống</option>
+                        <option value="Tiết kiệm">Tiết kiệm</option>
+                        <option value="Chơi">Chơi</option>
+                        <option value="Ăn uống">Ăn uống</option>
+                        <option value="Đầu tư">Đầu tư</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="limitAmount"><i class="fas fa-money-bill-wave"></i> Giới hạn (VND)</label>
+                    <input type="number" id="limitAmount" name="amount" required step="1000" placeholder="0">
+                </div>
+
+                <div class="form-group">
+                    <label for="limitPeriod"><i class="fas fa-calendar"></i> Kỳ hạn</label>
+                    <select id="limitPeriod" name="period" required>
+                        <option value="daily">Hàng ngày</option>
+                        <option value="weekly">Hàng tuần</option>
+                        <option value="monthly" selected>Hàng tháng</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" onclick="closeLimitModal()">Hủy</button>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-save"></i> Lưu giới hạn
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
     // Category Chart
     const categoryCtx = document.getElementById('categoryChart').getContext('2d');
@@ -444,11 +657,44 @@ try {
         document.getElementById('addModal').style.display = 'none';
     }
 
+    // Hàm xử lý giới hạn chi tiêu
+    function showLimitModal() {
+        document.getElementById('limitModalTitle').innerHTML = '<i class="fas fa-chart-line"></i> Thêm giới hạn chi tiêu';
+        document.getElementById('limitId').value = '';
+        document.getElementById('limitCategory').value = '';
+        document.getElementById('limitAmount').value = '';
+        document.getElementById('limitPeriod').value = 'monthly';
+        document.getElementById('limitModal').style.display = 'block';
+    }
+
+    function editLimit(id, category, amount, period) {
+        document.getElementById('limitModalTitle').innerHTML = '<i class="fas fa-edit"></i> Sửa giới hạn chi tiêu';
+        document.getElementById('limitId').value = id;
+        document.getElementById('limitCategory').value = category;
+        document.getElementById('limitAmount').value = amount;
+        document.getElementById('limitPeriod').value = period;
+        document.getElementById('limitModal').style.display = 'block';
+    }
+
+    function closeLimitModal() {
+        document.getElementById('limitModal').style.display = 'none';
+    }
+
+    function deleteLimit(id) {
+        if (confirm('Bạn có chắc chắn muốn xoá giới hạn chi tiêu này?')) {
+            window.location.href = 'delete_limit.php?id=' + id;
+        }
+    }
+
     // Close modal on outside click
     window.onclick = function(event) {
         const modal = document.getElementById('addModal');
+        const limitModal = document.getElementById('limitModal');
         if (event.target === modal) {
             closeModal();
+        }
+        if (event.target === limitModal) {
+            closeLimitModal();
         }
     }
 
@@ -456,6 +702,7 @@ try {
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
             closeModal();
+            closeLimitModal();
         }
     });
 
